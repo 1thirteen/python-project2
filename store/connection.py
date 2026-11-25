@@ -6,6 +6,8 @@ import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
+from common.log import get as get_logger
+
 
 def connect(db_path) -> sqlite3.Connection:
     """打开一个连接：行工厂 + 外键开关 + 忙等超时。"""
@@ -42,7 +44,9 @@ def init_database(db_path, schema_path, seed_path=None) -> dict:
         if seed:
             conn.executescript(seed)
         conn.commit()
-        return counts(conn)
+        info = counts(conn)
+        get_logger().info("建库完成 %s：%s", db_path, info)
+        return info
     finally:
         conn.close()
 

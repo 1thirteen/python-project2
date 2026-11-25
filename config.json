@@ -1,7 +1,7 @@
 {
   "app": {
     "title": "学生管理系统",
-    "version": "1.0"
+    "version": "1.1"
   },
   "database": {
     "path": "data/student.db",
@@ -10,7 +10,9 @@
   },
   "ui": {
     "page_size": 50,
-    "window": [1180, 740],
+    "page_size_options": [20, 50, 100, 200],
+    "theme": "light",
+    "window": [1220, 760],
     "font": "Microsoft YaHei UI 10"
   }
 }

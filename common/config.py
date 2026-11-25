@@ -9,9 +9,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 DEFAULTS = {
-    "app": {"title": "学生管理系统", "version": "1.0"},
+    "app": {"title": "学生管理系统", "version": "1.1"},
     "database": {"path": "data/student.db", "schema": "db/schema.sql", "seed": "db/seed.sql"},
-    "ui": {"page_size": 50, "window": [1180, 740], "font": "Microsoft YaHei UI 10"},
+    "ui": {
+        "page_size": 50,
+        "page_size_options": [20, 50, 100, 200],
+        "theme": "light",
+        "window": [1220, 760],
+        "font": "Microsoft YaHei UI 10",
+    },
 }
 
 
@@ -26,9 +32,11 @@ class Config:
     schema_path: Path
     seed_path: Path
     title: str = "学生管理系统"
-    version: str = "1.0"
+    version: str = "1.1"
     page_size: int = 50
-    window: tuple[int, int] = (1180, 740)
+    page_size_options: tuple[int, ...] = (20, 50, 100, 200)
+    theme: str = "light"
+    window: tuple[int, int] = (1220, 760)
     font: str = "Microsoft YaHei UI 10"
 
     def with_db(self, db_path) -> "Config":
@@ -67,12 +75,18 @@ def load(config_path=None, db_path=None) -> Config:
     try:
         page_size = int(raw["ui"]["page_size"])
         window = tuple(int(v) for v in raw["ui"]["window"])
+        options = tuple(sorted({int(v) for v in raw["ui"]["page_size_options"]}))
     except (KeyError, TypeError, ValueError):
-        raise ConfigError("ui.page_size / ui.window 格式不正确") from None
+        raise ConfigError("ui.page_size / ui.page_size_options / ui.window 格式不正确") from None
     if page_size <= 0:
         raise ConfigError("ui.page_size 必须是正整数")
+    if not options or any(v <= 0 for v in options):
+        raise ConfigError("ui.page_size_options 必须是正整数列表")
     if len(window) != 2:
         raise ConfigError("ui.window 必须是 [宽, 高]")
+    theme = str(raw["ui"].get("theme") or "light")
+    if theme not in ("light", "dark"):
+        raise ConfigError("ui.theme 只能是 light 或 dark")
 
     cfg = Config(
         root=ROOT,
@@ -80,8 +94,10 @@ def load(config_path=None, db_path=None) -> Config:
         schema_path=_resolve(ROOT, raw["database"]["schema"], "database.schema"),
         seed_path=_resolve(ROOT, raw["database"]["seed"], "database.seed"),
         title=str(raw["app"].get("title") or "学生管理系统"),
-        version=str(raw["app"].get("version") or "1.0"),
+        version=str(raw["app"].get("version") or "1.1"),
         page_size=page_size,
+        page_size_options=options,
+        theme=theme,
         window=window,
         font=str(raw["ui"].get("font") or "Microsoft YaHei UI 10"),
     )
