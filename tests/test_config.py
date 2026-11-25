@@ -16,6 +16,8 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(cfg.schema_path, ROOT / "db" / "schema.sql")
         self.assertEqual(cfg.seed_path, ROOT / "db" / "seed.sql")
         self.assertEqual(cfg.page_size, 50)
+        self.assertEqual(cfg.page_size_options, (20, 50, 100, 200))
+        self.assertEqual(cfg.theme, "light")
         self.assertEqual(len(cfg.window), 2)
 
     def test_db_path_override(self):
@@ -53,6 +55,27 @@ class ConfigTest(unittest.TestCase):
             cfg = config.load(str(path))
             self.assertEqual(cfg.title, "另一个标题")
             self.assertEqual(cfg.db_path, ROOT / "data" / "student.db")
+
+    def test_invalid_theme(self):
+        with temp_dir() as tmp:
+            path = Path(tmp) / "c.json"
+            path.write_text(json.dumps({"ui": {"theme": "rainbow"}}), encoding="utf-8")
+            with self.assertRaises(ConfigError):
+                config.load(str(path))
+
+    def test_invalid_page_size_options(self):
+        with temp_dir() as tmp:
+            path = Path(tmp) / "c.json"
+            path.write_text(json.dumps({"ui": {"page_size_options": []}}), encoding="utf-8")
+            with self.assertRaises(ConfigError):
+                config.load(str(path))
+
+    def test_page_size_options_are_sorted_and_deduplicated(self):
+        with temp_dir() as tmp:
+            path = Path(tmp) / "c.json"
+            path.write_text(json.dumps({"ui": {"page_size_options": [100, 20, 100]}}),
+                            encoding="utf-8")
+            self.assertEqual(config.load(str(path)).page_size_options, (20, 100))
 
 
 if __name__ == "__main__":

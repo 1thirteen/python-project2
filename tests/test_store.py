@@ -28,7 +28,7 @@ class SchemaTest(unittest.TestCase):
                              {"classes", "students", "courses", "scores"})
             self.assertEqual(kinds["view"], {"v_student_score", "v_course_stats", "v_student_avg"})
             self.assertEqual(kinds["trigger"], {"trg_scores_touch"})
-            self.assertEqual(len(kinds["index"]), 7)
+            self.assertEqual(len(kinds["index"]), 9)   # 4 个自动 + 5 个手工
         finally:
             conn.close()
 

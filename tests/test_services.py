@@ -239,5 +239,78 @@ class ScoreServiceTest(unittest.TestCase):
                          [51.0, 55.0, 58.0])
 
 
+class ScoreEntryTest(unittest.TestCase):
+    """按学号/课程号录入 + 按班级批量录入。"""
+
+    def setUp(self):
+        self._db = TempDatabase()
+        self.cfg = self._db.__enter__()
+
+    def tearDown(self):
+        self._db.__exit__(None, None, None)
+
+    def test_save_by_codes_updates(self):
+        action = score_service.save_by_codes(self.cfg, "20240101", "C001", "2024-2025-1", 85)
+        self.assertEqual(action, "updated")
+        rows = score_service.list_scores(self.cfg, student_id=1, course_id=1,
+                                         term="2024-2025-1")
+        self.assertEqual(rows[0]["score"], 85.0)
+
+    def test_save_by_codes_new_term(self):
+        action = score_service.save_by_codes(self.cfg, "20240101", "c001", "2026-2027-1", 77)
+        self.assertEqual(action, "inserted")
+        rows = score_service.list_scores(self.cfg, student_id=1, course_id=1,
+                                         term="2026-2027-1")
+        self.assertEqual(rows[0]["score"], 77.0)
+
+    def test_save_by_codes_unknown_codes(self):
+        with self.assertRaises(NotFoundError):
+            score_service.save_by_codes(self.cfg, "99999999", "C001", "2024-2025-1", 80)
+        with self.assertRaises(NotFoundError):
+            score_service.save_by_codes(self.cfg, "20240101", "C999", "2024-2025-1", 80)
+
+    def test_roster(self):
+        rows = score_service.roster(self.cfg, 1, 1, "2024-2025-1")
+        self.assertEqual(len(rows), 4)
+        scores = {row["sno"]: row["score"] for row in rows}
+        self.assertEqual(scores["20240101"], 92.0)
+        self.assertEqual(scores["20240103"], 55.0)
+        self.assertTrue(all(row["score"] is not None for row in rows))
+
+    def test_roster_shows_null_for_unrecorded(self):
+        rows = score_service.roster(self.cfg, 3, 1, "2024-2025-1")
+        self.assertEqual(len(rows), 3)
+        self.assertTrue(all(row["score"] is None for row in rows))
+
+    def test_batch_save_mixes_saved_skipped_and_errors(self):
+        rows = score_service.roster(self.cfg, 1, 1, "2024-2025-1")
+        ids = [row["student_id"] for row in rows]
+        result = score_service.batch_save(self.cfg, 1, "2024-2025-1", [
+            {"student_id": ids[0], "score": "70"},
+            {"student_id": ids[1], "score": ""},
+            {"student_id": ids[2], "score": "abc"},
+        ])
+        self.assertEqual(result["saved"], 1)
+        self.assertEqual(result["skipped"], 1)
+        self.assertEqual(len(result["errors"]), 1)
+        updated = score_service.list_scores(self.cfg, student_id=ids[0], course_id=1,
+                                            term="2024-2025-1")
+        self.assertEqual(updated[0]["score"], 70.0)
+
+    def test_batch_save_all_rows(self):
+        rows = score_service.roster(self.cfg, 3, 1, "2024-2025-1")
+        result = score_service.batch_save(self.cfg, 1, "2024-2025-1", [
+            {"student_id": row["student_id"], "score": 80} for row in rows
+        ])
+        self.assertEqual(result["saved"], 3)
+        self.assertEqual(result["errors"], [])
+        after = score_service.roster(self.cfg, 3, 1, "2024-2025-1")
+        self.assertTrue(all(row["score"] == 80.0 for row in after))
+
+    def test_batch_save_invalid_term(self):
+        with self.assertRaises(ValidationError):
+            score_service.batch_save(self.cfg, 1, "2024/2025", [])
+
+
 if __name__ == "__main__":
     unittest.main()
