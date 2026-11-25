@@ -1,0 +1,16 @@
+{
+  "app": {
+    "title": "学生管理系统",
+    "version": "1.0"
+  },
+  "database": {
+    "path": "data/student.db",
+    "schema": "db/schema.sql",
+    "seed": "db/seed.sql"
+  },
+  "ui": {
+    "page_size": 50,
+    "window": [1180, 740],
+    "font": "Microsoft YaHei UI 10"
+  }
+}
