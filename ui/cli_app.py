@@ -11,16 +11,23 @@ from common import tablefmt
 from common.errors import AppError
 from service import classes as class_service
 from service import courses as course_service
+from service import exports
+from service import imports as import_service
 from service import reports
 from service import scores as score_service
 from service import students as student_service
 
 
 # ---------------------------------------------------------------- 输出工具
-def _show(rows, headers, keys) -> None:
+def _show(rows, headers, keys, footer=None) -> None:
     print(tablefmt.render(headers, [[row.get(key) for key in keys] for row in rows]))
-    print(f"共 {len(rows)} 条")
+    print(footer or f"共 {len(rows)} 条")
     print()
+
+
+def _print_errors(errors) -> None:
+    for line, message in errors[:10]:
+        print(f"  第 {line} 行：{message}")
 
 
 def _ok(message: str) -> None:
@@ -29,6 +36,18 @@ def _ok(message: str) -> None:
 
 # ---------------------------------------------------------------- students
 def cmd_students_list(cfg, args) -> int:
+    if args.page or args.size:
+        result = student_service.page(
+            cfg, keyword=args.keyword or "", class_id=args.class_id,
+            order=args.sort, descending=args.desc,
+            page=args.page or 1, size=args.size or 50,
+        )
+        _show(
+            result["rows"], ["学号", "姓名", "性别", "班级", "电话", "入学日期"],
+            ["sno", "name", "gender", "class_name", "phone", "enroll_date"],
+            footer=f"第 {result['page']} / {result['pages']} 页 · 共 {result['total']} 条",
+        )
+        return 0
     rows = student_service.list_students(
         cfg, keyword=args.keyword or "", class_id=args.class_id,
         order=args.sort, descending=args.desc,
@@ -74,6 +93,32 @@ def cmd_students_show(cfg, args) -> int:
         print("暂无成绩记录")
         return 0
     _show(rows, ["课程", "学期", "成绩", "状态"], ["course", "term", "score", "pass_state"])
+    return 0
+
+
+def cmd_students_import(cfg, args) -> int:
+    result = import_service.import_students(cfg, args.file)
+    print(f"共 {result['total']} 行，成功导入 {result['inserted']} 行")
+    if result["errors"]:
+        print(f"{len(result['errors'])} 行有问题：")
+        _print_errors(result["errors"])
+        return 1
+    return 0
+
+
+def cmd_students_template(cfg, args) -> int:
+    path = import_service.write_template(args.out, "students")
+    print(f"模板已写入 {path}")
+    return 0
+
+
+def cmd_students_transcript(cfg, args) -> int:
+    path = Path(args.out)
+    if path.suffix.lower() in (".html", ".htm"):
+        target = exports.write_transcript_html(cfg, args.student_id, path)
+    else:
+        target = exports.write_transcript_csv(cfg, args.student_id, path)
+    print(f"成绩单已写入 {target}")
     return 0
 
 
@@ -151,6 +196,17 @@ def cmd_classes_delete(cfg, args) -> int:
 
 # ---------------------------------------------------------------- scores
 def cmd_scores_list(cfg, args) -> int:
+    if args.page or args.size:
+        result = score_service.page(
+            cfg, student_id=args.student_id, course_id=args.course_id,
+            term=args.term, keyword=args.keyword or "", only_missing=args.missing,
+            order=args.sort, descending=args.desc,
+            page=args.page or 1, size=args.size or 50,
+        )
+        _show(result["rows"], ["学号", "姓名", "课程", "学期", "成绩", "状态"],
+              ["sno", "name", "course", "term", "score", "pass_state"],
+              footer=f"第 {result['page']} / {result['pages']} 页 · 共 {result['total']} 条")
+        return 0
     rows = score_service.list_scores(
         cfg, student_id=args.student_id, course_id=args.course_id,
         term=args.term, keyword=args.keyword or "", only_missing=args.missing,
@@ -158,6 +214,16 @@ def cmd_scores_list(cfg, args) -> int:
     )
     _show(rows, ["学号", "姓名", "课程", "学期", "成绩", "状态"],
           ["sno", "name", "course", "term", "score", "pass_state"])
+    return 0
+
+
+def cmd_scores_import(cfg, args) -> int:
+    result = import_service.import_scores(cfg, args.file)
+    print(f"共 {result['total']} 行，成功写入 {result['saved']} 行")
+    if result["errors"]:
+        print(f"{len(result['errors'])} 行有问题：")
+        _print_errors(result["errors"])
+        return 1
     return 0
 
 
@@ -246,6 +312,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--class-id", type=int, help="只看某个班级")
     p.add_argument("--sort", default="sno", choices=["sno", "name", "gender", "class_name", "enroll_date"])
     p.add_argument("--desc", action="store_true", help="倒序")
+    p.add_argument("--page", type=int, help="只看第 N 页（配合 --size）")
+    p.add_argument("--size", type=int, help="每页条数，默认 50")
     p.set_defaults(func=cmd_students_list)
 
     p = ssub.add_parser("add", help="新增学生")
@@ -276,6 +344,19 @@ def build_parser() -> argparse.ArgumentParser:
     p = ssub.add_parser("show", help="查看某学生的成绩单")
     p.add_argument("student_id", type=int)
     p.set_defaults(func=cmd_students_show)
+
+    p = ssub.add_parser("import", help="从 CSV 批量导入学生")
+    p.add_argument("--file", required=True, help="CSV 路径（列：学号,姓名,性别,班级,电话,邮箱,出生日期）")
+    p.set_defaults(func=cmd_students_import)
+
+    p = ssub.add_parser("template", help="导出学生导入模板")
+    p.add_argument("--out", required=True)
+    p.set_defaults(func=cmd_students_template)
+
+    p = ssub.add_parser("transcript", help="导出成绩单（.csv 或 .html）")
+    p.add_argument("student_id", type=int)
+    p.add_argument("--out", required=True)
+    p.set_defaults(func=cmd_students_transcript)
 
     # courses
     courses = sub.add_parser("courses", help="课程管理")
@@ -347,6 +428,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--missing", action="store_true", help="只看未录入")
     p.add_argument("--sort", default="sno", choices=["sno", "name", "course", "term", "score", "class_name"])
     p.add_argument("--desc", action="store_true")
+    p.add_argument("--page", type=int, help="只看第 N 页（配合 --size）")
+    p.add_argument("--size", type=int, help="每页条数，默认 50")
     p.set_defaults(func=cmd_scores_list)
 
     p = ssub2.add_parser("set", help="录入或修改一条成绩（省略 --score 表示未录入）")
@@ -361,6 +444,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--course-id", type=int, required=True)
     p.add_argument("--term", required=True)
     p.set_defaults(func=cmd_scores_delete)
+
+    p = ssub2.add_parser("import", help="从 CSV 批量导入成绩")
+    p.add_argument("--file", required=True, help="CSV 路径（列：学号,课程号,学期,成绩）")
+    p.set_defaults(func=cmd_scores_import)
 
     # stats
     stats = sub.add_parser("stats", help="统计报表")

@@ -11,7 +11,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from common import config
+from common import config, log as log_module
 from common.config import ConfigError
 from common.errors import AppError
 from store import connection
@@ -73,6 +73,8 @@ def cmd_gui(cfg) -> int:
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     cfg = _load(args)
+    log = log_module.setup()
+    log.info("启动：command=%s db=%s", args.command or "gui", cfg.db_path)
 
     try:
         if args.command == "init":
@@ -86,6 +88,7 @@ def main(argv=None) -> int:
         print(f"未知命令：{args.command}（可用：init / cli / gui）", file=sys.stderr)
         return 2
     except AppError as exc:
+        log.warning("业务错误：%s", exc)
         print(f"错误：{exc}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:
