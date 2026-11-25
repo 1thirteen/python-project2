@@ -1,4 +1,4 @@
-"""学生表的 SQL。"""
+"""学生表的 SQL：列表、分页、总数、增删改。"""
 
 from __future__ import annotations
 
@@ -23,25 +23,53 @@ ORDER_COLUMNS = {
 EDITABLE = ("sno", "name", "gender", "birthday", "phone", "email", "class_id")
 
 
-def list_students(conn: sqlite3.Connection, keyword: str = "", class_id=None,
-                  order: str = "sno", descending: bool = False) -> list[sqlite3.Row]:
-    if order not in ORDER_COLUMNS:
-        raise ValueError(f"不支持的排序字段：{order}")
-    sql = BASE_SQL + " WHERE 1 = 1"
-    params: list = []
+def _filters(keyword: str, class_id) -> tuple[str, list]:
+    sql, params = "", []
     if keyword:
         sql += " AND (s.name LIKE ? OR s.sno LIKE ? OR s.phone LIKE ?)"
-        like = f"%{keyword}%"
-        params += [like, like, like]
+        params += [f"%{keyword}%"] * 3
     if class_id is not None:
         sql += " AND s.class_id = ?"
         params.append(class_id)
-    sql += f" ORDER BY {ORDER_COLUMNS[order]} {'DESC' if descending else 'ASC'}, s.sno"
+    return sql, params
+
+
+def _order(order: str, descending: bool) -> str:
+    if order not in ORDER_COLUMNS:
+        raise ValueError(f"不支持的排序字段：{order}")
+    direction = "DESC" if descending else "ASC"
+    return f" ORDER BY {ORDER_COLUMNS[order]} {direction}, s.sno"
+
+
+def list_students(conn: sqlite3.Connection, keyword: str = "", class_id=None,
+                  order: str = "sno", descending: bool = False) -> list[sqlite3.Row]:
+    where, params = _filters(keyword, class_id)
+    sql = BASE_SQL + " WHERE 1 = 1" + where + _order(order, descending)
     return conn.execute(sql, params).fetchall()
+
+
+def count_students(conn: sqlite3.Connection, keyword: str = "", class_id=None) -> int:
+    where, params = _filters(keyword, class_id)
+    return conn.execute(
+        "SELECT COUNT(*) FROM students s WHERE 1 = 1" + where, params
+    ).fetchone()[0]
+
+
+def page_students(conn: sqlite3.Connection, keyword: str = "", class_id=None,
+                  order: str = "sno", descending: bool = False,
+                  limit: int = 50, offset: int = 0) -> list[sqlite3.Row]:
+    where, params = _filters(keyword, class_id)
+    sql = BASE_SQL + " WHERE 1 = 1" + where + _order(order, descending)
+    sql += " LIMIT ? OFFSET ?"
+    return conn.execute(sql, params + [limit, offset]).fetchall()
 
 
 def get_student(conn: sqlite3.Connection, student_id: int):
     return conn.execute(BASE_SQL + " WHERE s.student_id = ?", (student_id,)).fetchone()
+
+
+def find_by_sno(conn: sqlite3.Connection, sno: str):
+    return conn.execute("SELECT * FROM students WHERE sno = ?", (sno,)).fetchone()
 
 
 def create_student(conn: sqlite3.Connection, data: dict) -> int:

@@ -59,6 +59,11 @@ CREATE INDEX idx_students_class ON students (class_id);
 CREATE INDEX idx_students_name  ON students (name);
 CREATE INDEX idx_scores_course  ON scores  (course_id);
 
+-- 万行级数据的两条补充索引：
+-- 班级内按姓名排序 / 成绩按学期筛选，避免每次都对全表排序或扫描
+CREATE INDEX idx_students_class_name ON students (class_id, name);
+CREATE INDEX idx_scores_term ON scores (term);
+
 CREATE VIEW v_student_score AS
 SELECT sc.rowid      AS score_id,
        s.sno         AS sno,

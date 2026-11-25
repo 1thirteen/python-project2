@@ -42,6 +42,10 @@ def get_course(conn: sqlite3.Connection, course_id: int):
     return conn.execute("SELECT * FROM courses WHERE course_id = ?", (course_id,)).fetchone()
 
 
+def find_by_cno(conn: sqlite3.Connection, cno: str):
+    return conn.execute("SELECT * FROM courses WHERE cno = ?", (cno,)).fetchone()
+
+
 def create_course(conn: sqlite3.Connection, data: dict) -> int:
     cur = conn.execute(
         """INSERT INTO courses (cno, title, credit, teacher, hours)
